@@ -1,11 +1,114 @@
-import Head from 'next/head'
-import Image from 'next/image'
-import { Inter } from '@next/font/google'
-import styles from '../styles/Home.module.css'
+import Head from "next/head";
+import Image from "next/image";
+import { Inter } from "@next/font/google";
+import styles from "../styles/Home.module.css";
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ["latin"] });
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import React, { useState, useEffect } from "react";
+import { ethers } from "ethers";
+import lighthouse from "@lighthouse-web3/sdk";
+import { useAccount, useProvider, useSigner } from "wagmi";
+const API_KEY = process.env.API_KEY;
 
 export default function Home() {
+  const [fileURL, setFileURL] = React.useState(null);
+  const [event, setEvent] = useState();
+  const [encryptedCID, setEncryptedCID] = useState();
+  const provider = useProvider();
+  const { data: signer } = useSigner();
+  const { address } = useAccount();
+  const encryptionSignature = async () => {
+    console.log(address);
+    const messageRequested = (await lighthouse.getAuthMessage(address)).data
+      .message;
+    console.log(messageRequested);
+    const signedMessage = await signer.signMessage(messageRequested);
+    console.log(signedMessage);
+    return {
+      signedMessage: signedMessage,
+      publicKey: address,
+    };
+  };
+
+  const progressCallback = (progressData) => {
+    let percentageDone =
+      100 - (progressData?.total / progressData?.uploaded)?.toFixed(2);
+    console.log(percentageDone);
+  };
+
+  /* Deploy file along with encryption */
+  const uploadFileEncrypted = async (e) => {
+    /*
+       uploadEncrypted(e, accessToken, publicKey, signedMessage, uploadProgressCallback)
+       - e: js event
+       - accessToken: your API key
+       - publicKey: wallets public key
+       - signedMessage: message signed by the owner of publicKey
+       - uploadProgressCallback: function to get progress (optional)
+    */
+    const sig = await encryptionSignature();
+    const response = await lighthouse.uploadEncrypted(
+      e,
+      API_KEY,
+      sig.publicKey,
+      sig.signedMessage,
+      progressCallback
+    );
+    console.log(response);
+    setEncryptedCID(response.data.Hash);
+    // "QmdCCjY2RFztdgXJewMo2GKttn6TFead3XthARtAkF3eUP"
+    /*
+      output:
+        data: {
+          Name: "c04b017b6b9d1c189e15e6559aeb3ca8.png",
+          Size: "318557",
+          Hash: "QmcuuAtmYqbPYmPx3vhJvPDi61zMxYvJbfENMjBQjq7aM3"
+        }
+      Note: Hash in response is CID.
+    */
+  };
+
+  const decrypt = async () => {
+    // Fetch file encryption key
+    const cid = "QmdCCjY2RFztdgXJewMo2GKttn6TFead3XthARtAkF3eUP"; //replace with your IPFS CID
+    const { publicKey, signedMessage } = await encryptionSignature();
+    /*
+      fetchEncryptionKey(cid, publicKey, signedMessage)
+        Parameters:
+          CID: CID of the file to decrypt
+          publicKey: public key of the user who has access to file or owner
+          signedMessage: message signed by the owner of publicKey
+    */
+    const keyObject = await lighthouse.fetchEncryptionKey(
+      cid,
+      publicKey,
+      signedMessage
+    );
+
+    // Decrypt file
+    /*
+      decryptFile(cid, key, mimeType)
+        Parameters:
+          CID: CID of the file to decrypt
+          key: the key to decrypt the file
+          mimeType: default null, mime type of file
+    */
+    console.log(keyObject);
+
+    const fileType = "image/jpeg";
+    const decrypted = await lighthouse.decryptFile(
+      cid,
+      keyObject.data.key,
+      fileType
+    );
+    console.log(decrypted);
+    // View File
+    const url = URL.createObjectURL(decrypted);
+    console.log(url);
+    setFileURL(url);
+  };
+
   return (
     <>
       <Head>
@@ -16,108 +119,21 @@ export default function Home() {
       </Head>
       <main className={styles.main}>
         <div className={styles.description}>
-          <p>
-            Get started by editing&nbsp;
-            <code className={styles.code}>pages/index.js</code>
-          </p>
+          <p>Lighthouse File Encryption</p>
           <div>
-            <a
-              href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              By{' '}
-              <Image
-                src="/vercel.svg"
-                alt="Vercel Logo"
-                className={styles.vercelLogo}
-                width={100}
-                height={24}
-                priority
-              />
-            </a>
+            Get Started by Connecting the Wallet
+            <ConnectButton />
+            <button onClick={() => uploadFileEncrypted(event)}>
+              Encrypt File
+            </button>
+            <input onChange={(e) => setEvent(e)} type="file" />
+            <br />
+            <button onClick={() => decrypt()}>Decrypt File</button>
           </div>
         </div>
 
-        <div className={styles.center}>
-          <Image
-            className={styles.logo}
-            src="/next.svg"
-            alt="Next.js Logo"
-            width={180}
-            height={37}
-            priority
-          />
-          <div className={styles.thirteen}>
-            <Image
-              src="/thirteen.svg"
-              alt="13"
-              width={40}
-              height={31}
-              priority
-            />
-          </div>
-        </div>
-
-        <div className={styles.grid}>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Docs <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Find in-depth information about Next.js features and&nbsp;API.
-            </p>
-          </a>
-
-          <a
-            href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Learn <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Learn about Next.js in an interactive course with&nbsp;quizzes!
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Templates <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Discover and deploy boilerplate example Next.js&nbsp;projects.
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Deploy <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Instantly deploy your Next.js site to a shareable URL
-              with&nbsp;Vercel.
-            </p>
-          </a>
-        </div>
+        <div className={styles.center}>{/* <img src={fileURL}></img> */}</div>
       </main>
     </>
-  )
+  );
 }
